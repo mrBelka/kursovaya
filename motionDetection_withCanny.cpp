@@ -34,7 +34,7 @@ using namespace cv;
 
 int main(int argc, char **argv) {
 	// ввод изображения
-	Mat image = imread("lena3.jpg", CV_LOAD_IMAGE_COLOR);
+	Mat image = imread("lena6.jpg", CV_LOAD_IMAGE_COLOR);
 	int imheight = image.rows;
 	int imwidth = image.cols;
 
@@ -192,6 +192,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	printf("%d",t);
 	imshow("Source", image);
 
 	// обработка прямоугольных областей
