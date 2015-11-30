@@ -17,23 +17,24 @@ using namespace cv;
 #define PYRAMIDLEVELS 2
 //сонаправленные линии
 #define CONTOUR_LENGHT_CRITICAL_VALUE 100
-#define CONTOUR_KOEF 2
+#define CONTOUR_KOEF_CRITICAL_VALUE 2
 //разбиение на прямоугольники
 #define SEGMENTS_MAX 20000
-#define SEGMENTS_HEIGHT 10
-#define SEGMENTS_WIDTH 10
+#define SEGMENTS_HEIGHT 30
+#define SEGMENTS_WIDTH 30
 #define DIFFERENCE 500000
 //обработка прямоугольников
 #define KERNEL_SIZE 3
 #define SCALE 1
 #define DELTA 0
 //анализ
-#define LAPLACE_CRITICAL_VALUE 15
+#define LAPLACE_CRITICAL_VALUE_MIN 30
+#define LAPLACE_CRITICAL_VALUE_MAX 50
 
 
 int main(int argc, char **argv) {
 	// ввод изображения
-	Mat image = imread("lena5.jpg", CV_LOAD_IMAGE_COLOR);
+	Mat image = imread("lena3.jpg", CV_LOAD_IMAGE_COLOR);
 	int imheight = image.rows;
 	int imwidth = image.cols;
 
@@ -80,22 +81,22 @@ int main(int argc, char **argv) {
 		int x1 = cont[i][1].x;
 		int y0 = cont[i][0].y;
 		int y1 = cont[i][1].y;
-			//printf("%d %d %d\n", i, cont[i][0].x, cont[i][0].y);
-			//printf("%d %d %d\n", i, cont[i][1].x, cont[i][1].y);
+		//printf("%d %d %d\n", i, cont[i][0].x, cont[i][0].y);
+		//printf("%d %d %d\n", i, cont[i][1].x, cont[i][1].y);
 		if (x0 > x1){
 			d = (y0 - y1)*1.0 / (x0 - x1);
 		}
-		else if(x1 > x0){
+		else if (x1 > x0){
 			d = (y1 - y0)*1.0 / (x1 - x0);
 		}
 
 		//увеличиваем соответсвующий счетчик
-		if ((x1-x0)*(x1-x0)+(y1-y0)*(y1-y0)>CONTOUR_LENGHT_CRITICAL_VALUE){
+		if ((x1 - x0)*(x1 - x0) + (y1 - y0)*(y1 - y0)>CONTOUR_LENGHT_CRITICAL_VALUE){
 			if (d >= sqrt(3.0)) {
 				cnt[0]++;
-				color = Scalar(255,0,0);
+				color = Scalar(255, 0, 0);
 			}
-			else if (d < sqrt(3.0) && d>=sqrt(3.0) / 3) {
+			else if (d < sqrt(3.0) && d >= sqrt(3.0) / 3) {
 				cnt[1]++;
 				color = Scalar(0, 255, 0);
 			}
@@ -103,11 +104,11 @@ int main(int argc, char **argv) {
 				cnt[2]++;
 				color = Scalar(0, 0, 255);
 			}
-			else if (d<0 && d>=-sqrt(3.0) / 3){
+			else if (d<0 && d >= -sqrt(3.0) / 3){
 				cnt[3]++;
 				color = Scalar(255, 255, 0);
 			}
-			else if (d<-sqrt(3.0) / 3 && d>=-sqrt(3.0)){
+			else if (d<-sqrt(3.0) / 3 && d >= -sqrt(3.0)){
 				cnt[4]++;
 				color = Scalar(255, 0, 255);
 			}
@@ -140,12 +141,12 @@ int main(int argc, char **argv) {
 	double div = 0;
 	for (int i = 0; i < 6; i++){
 		if (pos == i)continue;
-		if(max*1.0/cnt[i]>div)
+		if (max*1.0 / cnt[i]>div)
 			div = max*1.0 / cnt[i];
 	}
 	//если количество линии одного направление хотя бы в CANNY_KOEF раз превосходит
 	//кол-во линий ближайшего по численности направления, то движение в первом направлении есть
-	if (div >= CONTOUR_KOEF){
+	if (div >= CONTOUR_KOEF_CRITICAL_VALUE){
 		printf("1st FILTER: Codirectional line, Verdict: ");
 		SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 2));
 		printf("YES");
@@ -212,16 +213,13 @@ int main(int argc, char **argv) {
 		if (h[i] >= imheight)h[i] = imheight - 1;
 		if (w[i] / 3 >= imwidth)w[i] = 3 * (imwidth - 1);
 		// не анализируем слишком маленькие сегменты
-		if ((w[i] - x[i])/3<SEGMENTS_WIDTH || h[i] - y[i]<SEGMENTS_HEIGHT)
+		if ((w[i] - x[i]) / 3<SEGMENTS_WIDTH || h[i] - y[i]<SEGMENTS_HEIGHT)
 			continue;
 
 		segms_num++;
 
 		// выделяем данный прямоугольник из исходного изображения
 		src = image(Rect(x[i] / 3, y[i], (w[i] - x[i]) / 3, h[i] - y[i]));
-
-		// удаляем шумы с помощью фильтра Гаусса
-		GaussianBlur(src, src, Size(3, 3), 0, 0, BORDER_DEFAULT);
 
 		// переводим изображение в серые тона
 		cvtColor(src, src_gray, CV_RGB2GRAY);
@@ -244,10 +242,9 @@ int main(int argc, char **argv) {
 
 		// если среднее значение яркости меньше критического значения фильтра,
 		// то область считаем размытой
-		if (laplace_num < LAPLACE_CRITICAL_VALUE){
+		if (LAPLACE_CRITICAL_VALUE_MIN < laplace_num && laplace_num < LAPLACE_CRITICAL_VALUE_MAX){
 			blur_size++;
-			//потому что важнее обратное значение
-			sum += (1 - laplace_num / LAPLACE_CRITICAL_VALUE);
+			sum += laplace_num / LAPLACE_CRITICAL_VALUE_MAX;
 			rectangle(image, Rect(x[i] / 3, y[i], (w[i] - x[i]) / 3, h[i] - y[i]), Scalar(255, 0, 0));
 			rectangle(wshed, Rect(x[i] / 3, y[i], (w[i] - x[i]) / 3, h[i] - y[i]), Scalar(255, 0, 0));
 		}
@@ -258,14 +255,14 @@ int main(int argc, char **argv) {
 	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 2));
 	printf("YES");
 	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 15));
-	printf(" for %d segments, Average probability: %3.1f\n", blur_size, sum / blur_size);
+	printf(" for %d segments\n", blur_size);
 	printf("    Verdict: ");
 	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 4));
 	printf("NO");
 	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 15));
 	printf(" for %d segments\n", segms_num - blur_size);
 	// выводим изображение с контурами	
-	//imshow("Result window", drawing);
+	imshow("Result window", drawing);
 	imshow("Result1", image_cont);
 	// выводим исходное изображение с указанием областей, где предполагается движение
 	imshow("Result2", image);
@@ -275,4 +272,3 @@ int main(int argc, char **argv) {
 	waitKey(0);
 	return 0;
 }
-
