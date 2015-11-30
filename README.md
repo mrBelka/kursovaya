@@ -11,6 +11,7 @@
 1. watershedSegmentation.cpp
 2. meanShiftSegmentation.cpp
 3. floodFillSegmentation.cpp
+4. EfficientGraph-BasedImageSegmentation.cpp
 
 ---Фильтры---
 
