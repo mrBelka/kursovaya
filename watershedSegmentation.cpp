@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
 
@@ -77,6 +78,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	printf("Number of segment %d",t);
 	imshow("watershed transform", wshed);
 	imshow("result", image);
 	waitKey(0);
