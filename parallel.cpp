@@ -11,16 +11,15 @@ using namespace cv;
 
 //параметры
 //сегментация
-#define SPATIALRADIUS 35
+#define SPATIALRADIUS 20
 #define COLORRADIUS 100
-#define PYRAMIDLEVELS 2
 //сонаправленные линии
 #define CONTOUR_LENGHT_CRITICAL_VALUE 100
 #define CONTOUR_KOEF 2
 //разбиение на прямоугольники
 #define SEGMENTS_MAX 30000
-#define SEGMENTS_HEIGHT 30
-#define SEGMENTS_WIDTH 30
+#define SEGMENTS_HEIGHT 20
+#define SEGMENTS_WIDTH 20
 #define DIFFERENCE 500000
 //обработка прямоугольников
 #define KERNEL_SIZE 3
@@ -32,7 +31,7 @@ using namespace cv;
 
 int main(int argc, char **argv) {
 	// ввод изображения
-	Mat image = imread("N7S70.jpg", CV_LOAD_IMAGE_COLOR);
+	Mat image = imread("olen.jpg", CV_LOAD_IMAGE_COLOR);
 
 	//start time
 	clock_t tStart = clock();
@@ -167,40 +166,17 @@ int main(int argc, char **argv) {
 	Mat image1;
 	cvtColor(image,image1,CV_RGB2RGBA,4);		//cvtColor is good in cpu
 	gpu::GpuMat gpuImage1(image1);
-	Mat wshed;
+	//Mat wshed;
 	int spatialRadius = SPATIALRADIUS;
 	int colorRadius = COLORRADIUS;
-	int pyramidLevels = PYRAMIDLEVELS;
-	gpu::meanShiftSegmentation(gpuImage1, wshed, spatialRadius, colorRadius, pyramidLevels);
+	gpu::GpuMat gpuIm;
+	//gpu::meanShiftSegmentation(gpuImage1, wshed, spatialRadius, colorRadius, 100);
+	gpu::meanShiftFiltering(gpuImage1,gpuIm,spatialRadius,colorRadius);
 	//imshow("MeanShiftSegmantation", wshed);
-	//imwrite("res.jpg",wshed);
+	Mat wshed(gpuIm);
+	imwrite("res.jpg",wshed);
 
-	// разбиение сегментов на прямоугольники
-	int x[SEGMENTS_MAX], y[SEGMENTS_MAX], w[SEGMENTS_MAX], h[SEGMENTS_MAX];
-	int t = 0, tmp, l;
-
-	for (int i = 0; i < wshed.rows; i += SEGMENTS_HEIGHT){
-		if (i >= wshed.rows) break;
-		tmp = wshed.at<unsigned char>(i, 0) + wshed.at<unsigned char>(i, 1) * 256 + wshed.at<unsigned char>(i, 2) * 256 * 256;
-		l = 0;
-		for (int j = 0; j < wshed.cols * 3; j += 3) {
-			if (abs(wshed.at<unsigned char>(i, j) + wshed.at<unsigned char>(i, j + 1) * 256 + wshed.at<unsigned char>(i, j + 2) * 256 * 256 - tmp) > DIFFERENCE || j == wshed.cols * 3 - 3) {
-				x[t] = l;
-				y[t] = i;
-				h[t] = wshed.cols - 1 > i + SEGMENTS_HEIGHT ? i + SEGMENTS_HEIGHT : wshed.cols;
-				w[t] = j - 4;
-				t++;
-				l = j;
-				tmp = wshed.at<unsigned char>(i, j) + wshed.at<unsigned char>(i, j + 1) * 256 + wshed.at<unsigned char>(i, j + 2) * 256 * 256;
-			}
-		}
-	}
-
-	//printf("Time taken: %.2fs\n",(double)(clock()-tStart)/CLOCKS_PER_SEC);
-	//return 0;
-
-	//imshow("Source", image);
-
+	// разбиение сегментов на прямоугольники и
 	// обработка прямоугольных областей
 	Mat src, src_gray, dst;
 	int kernel_size = KERNEL_SIZE;
@@ -212,59 +188,76 @@ int main(int argc, char **argv) {
 	int segms_num = 0;
 	int blur_size = 0;
 	double sum = 0;
+	int tmp, l;
 
-	// каждый прямоугольник
-	for (int i = 0; i < t; i++){
+	int x,y,w,h;
 
-		//если часом вышли за границы
-		if (h[i] >= imheight)h[i] = imheight - 1;
-		if (w[i] / 3 >= imwidth)w[i] = 3 * (imwidth - 1);
-		// не анализируем слишком маленькие сегменты
-		if ((w[i] - x[i])/3<SEGMENTS_WIDTH || h[i] - y[i]<SEGMENTS_HEIGHT)
-			continue;
+	for (int i = 0; i < wshed.rows; i += SEGMENTS_HEIGHT){
+		if (i >= wshed.rows) break;
+		tmp = wshed.at<unsigned char>(i, 0) + wshed.at<unsigned char>(i, 1) * 256 + wshed.at<unsigned char>(i, 2) * 256 * 256;
+		l = 0;
+		for (int j = 0; j < wshed.cols * 4; j += 4) {
+			if (abs(wshed.at<unsigned char>(i, j) + wshed.at<unsigned char>(i, j + 1) * 256 + wshed.at<unsigned char>(i, j + 2) * 256 * 256 - tmp) > DIFFERENCE || j == wshed.cols * 3 - 3) {
+				x = l;
+				y = i;
+				h = wshed.cols - 1 > i + SEGMENTS_HEIGHT ? i + SEGMENTS_HEIGHT : wshed.cols;
+				w = j - 5;
+				l = j;
+				tmp = wshed.at<unsigned char>(i, j) + wshed.at<unsigned char>(i, j + 1) * 256 + wshed.at<unsigned char>(i, j + 2) * 256 * 256;
 
-		segms_num++;
+				//printf("%d %d %d %d\n",x,y,w,h);
+				//если часом вышли за границы
+				if (h >= imheight)h = imheight - 1;
+				if (w / 4 >= imwidth)w = 4 * (imwidth - 1);
+				// не анализируем слишком маленькие сегменты
+				if ((w - x)/4<SEGMENTS_WIDTH || h - y<SEGMENTS_HEIGHT)
+					continue;
 
-		// выделяем данный прямоугольник из исходного изображения
-		src = image(Rect(x[i] / 3, y[i], (w[i] - x[i]) / 3, h[i] - y[i]));
+				segms_num++;
 
-		// удаляем шумы с помощью фильтра Гаусса
-		GaussianBlur(src, src, Size(3, 3), 0, 0, BORDER_DEFAULT);
+				// выделяем данный прямоугольник из исходного изображения
+				src = image(Rect(x / 4, y, (w - x) / 4, h - y));
 
-		// переводим изображение в серые тона
-		cvtColor(src, src_gray, CV_RGB2GRAY);
+				// удаляем шумы с помощью фильтра Гаусса
+				GaussianBlur(src, src, Size(3, 3), 0, 0, BORDER_DEFAULT);
 
-		Mat abs_dst;
-		Laplacian(src_gray, dst, ddepth, kernel_size, scale, delta, BORDER_DEFAULT);
-		convertScaleAbs(dst, abs_dst);
+				// переводим изображение в серые тона
+				cvtColor(src, src_gray, CV_RGB2GRAY);
 
-		//выводим информацию о прямоугольнике
-		//printf("Area #%d %d %d %d %d\n", i, x[i], y[i], w[i], h[i]);
+				Mat abs_dst;
+				Laplacian(src_gray, dst, ddepth, kernel_size, scale, delta, BORDER_DEFAULT);
+				convertScaleAbs(dst, abs_dst);
 
-		//просчитываем среднее значение яркости в данном прямоугольнике
-		m = 0;
-		for (int i = 0; i < abs_dst.rows; i++)
-			for (int j = 0; j < abs_dst.cols; j++)
-				m += abs_dst.at<unsigned char>(i, j);
+				//выводим информацию о прямоугольнике
+				//printf("Area #%d %d %d %d %d\n", i, x[i], y[i], w[i], h[i]);
 
-		double laplace_num = m*1.0 / (abs_dst.rows*abs_dst.cols);
-		//printf("Laplace number is %f\n\n", laplace_num);
+				//просчитываем среднее значение яркости в данном прямоугольнике
+				m = 0;
+				for (int ii = 0; ii < abs_dst.rows; ii++)
+					for (int jj = 0; jj < abs_dst.cols; jj++)
+						m += abs_dst.at<unsigned char>(ii, jj);
 
-		// если среднее значение яркости меньше критического значения фильтра,
-		// то область считаем размытой
-		if (laplace_num < LAPLACE_CRITICAL_VALUE){
-			blur_size++;
-			//потому что важнее обратное значение
-			sum += (1 - laplace_num / LAPLACE_CRITICAL_VALUE);
-			rectangle(image, Rect(x[i] / 3, y[i], (w[i] - x[i]) / 3, h[i] - y[i]), Scalar(255, 0, 0));
-			rectangle(wshed, Rect(x[i] / 3, y[i], (w[i] - x[i]) / 3, h[i] - y[i]), Scalar(255, 0, 0));
+				double laplace_num = m*1.0 / (abs_dst.rows*abs_dst.cols);
+				//printf("Laplace number is %f\n\n", laplace_num);
+
+				// если среднее значение яркости меньше критического значения фильтра,
+				// то область считаем размытой
+				if (laplace_num < LAPLACE_CRITICAL_VALUE){
+					blur_size++;
+					//потому что важнее обратное значение
+					sum += (1 - laplace_num / LAPLACE_CRITICAL_VALUE);
+					rectangle(image, Rect(x / 4, y, (w - x) / 4, h - y), Scalar(255, 0, 0));
+					rectangle(wshed, Rect(x / 4, y, (w - x) / 4, h - y), Scalar(255, 0, 0));
+				}
+
+			}
 		}
 	}
 
 	printf("2st FILTER: Blur detection\n");
 	printf("    Verdict: ");;
 	printf("YES");
-	printf(" for %d segments, Average probability: %3.1f\n", blur_size, sum / blur_size);
+	printf(" for %d segments\n", blur_size);
 	printf("    Verdict: ");
 	printf("NO");
 	printf(" for %d segments\n", segms_num - blur_size);
