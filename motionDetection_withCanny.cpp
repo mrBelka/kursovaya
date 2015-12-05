@@ -28,13 +28,13 @@ using namespace cv;
 #define SCALE 1
 #define DELTA 0
 //анализ
-#define LAPLACE_CRITICAL_VALUE_MIN 30
-#define LAPLACE_CRITICAL_VALUE_MAX 50
+#define LAPLACE_CRITICAL_VALUE_MIN 0
+#define LAPLACE_CRITICAL_VALUE_MAX 30
 
 
 int main(int argc, char **argv) {
 	// ввод изображения
-	Mat image = imread("lena6.jpg", CV_LOAD_IMAGE_COLOR);
+	Mat image = imread("lena3.jpg", CV_LOAD_IMAGE_COLOR);
 	int imheight = image.rows;
 	int imwidth = image.cols;
 
@@ -46,6 +46,7 @@ int main(int argc, char **argv) {
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 	findContours(gray, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0));
+
 
 	//отрисовка контуров
 	Mat drawing = Mat::zeros(gray.size(), CV_8UC3);
@@ -163,13 +164,15 @@ int main(int argc, char **argv) {
 		printf(", Probability: %3.1f\n", 1 - max*1.0 / cont_size);
 	}
 
+	imshow("123", drawing);
+
 	// сегментация алгоритмом MeanShift
 	Mat wshed;
 	int spatialRadius = SPATIALRADIUS;
 	int colorRadius = COLORRADIUS;
 	int pyramidLevels = PYRAMIDLEVELS;
 	pyrMeanShiftFiltering(image, wshed, spatialRadius, colorRadius, pyramidLevels);
-	//imshow("MeanShiftSegmantation", wshed);
+	imshow("MeanShiftSegmantation", wshed);
 
 	// разбиение сегментов на прямоугольники
 	int x[SEGMENTS_MAX], y[SEGMENTS_MAX], w[SEGMENTS_MAX], h[SEGMENTS_MAX];
@@ -192,7 +195,6 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	printf("%d",t);
 	imshow("Source", image);
 
 	// обработка прямоугольных областей
@@ -222,12 +224,16 @@ int main(int argc, char **argv) {
 		// выделяем данный прямоугольник из исходного изображения
 		src = image(Rect(x[i] / 3, y[i], (w[i] - x[i]) / 3, h[i] - y[i]));
 
+		if(i==1)imshow("21",src);
+
 		// переводим изображение в серые тона
 		cvtColor(src, src_gray, CV_RGB2GRAY);
 
 		Mat abs_dst;
 		Laplacian(src_gray, dst, ddepth, kernel_size, scale, delta, BORDER_DEFAULT);
 		convertScaleAbs(dst, abs_dst);
+
+		if (i == 1)imshow("22", abs_dst);
 
 		//выводим информацию о прямоугольнике
 		//printf("Area #%d %d %d %d %d\n", i, x[i], y[i], w[i], h[i]);
@@ -253,15 +259,17 @@ int main(int argc, char **argv) {
 
 	printf("2st FILTER: Blur detection\n");
 	printf("    Verdict: ");
-	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 2));
-	printf("YES");
-	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 15));
-	printf(" for %d segments\n", blur_size);
-	printf("    Verdict: ");
-	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 4));
-	printf("NO");
-	SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 15));
-	printf(" for %d segments\n", segms_num - blur_size);
+	
+	if (blur_size > 0){
+		SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 2));
+		printf("YES\n");
+		SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 15));
+	}
+	else{
+		SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 4));
+		printf("NO\n");
+		SetConsoleTextAttribute(hConsole, (WORD)((0 << 4) | 15));
+	}
 	// выводим изображение с контурами	
 	imshow("Result window", drawing);
 	imshow("Result1", image_cont);
